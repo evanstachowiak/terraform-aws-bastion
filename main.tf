@@ -37,7 +37,7 @@ data "aws_ami" "aws_optimized_ami" {
 
   filter {
     name   = "name"
-    values = ["amzn-ami-hvm*"]
+    values = ["amzn2-ami-hvm*"]
   }
 
   filter {
@@ -60,6 +60,17 @@ locals {
 
 data "template_file" "user_data" {
   template = file("${path.module}/template/user_data.sh")
+}
+
+resource "aws_eip_association" "eip_assoc" {
+  count         = var.enable_bastion ? 1 : 0
+  instance_id   = aws_instance.instance[0].id
+  allocation_id = aws_eip.service[0].allocation_id
+}
+
+resource "aws_eip" "service" {
+  count = var.enable_bastion ? 1 : 0
+  vpc   = true
 }
 
 resource "aws_instance" "instance" {

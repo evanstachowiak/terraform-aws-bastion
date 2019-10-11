@@ -8,3 +8,7 @@ output "public_ip" {
   value       = element(concat(aws_instance.instance.*.public_ip, [""]), 0)
 }
 
+output "sg_id" {
+  description = "Id of the sg created."
+  value       = element(concat(aws_security_group.ami.*.id, [""]), 0)
+}
