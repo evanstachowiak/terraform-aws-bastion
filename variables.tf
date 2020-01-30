@@ -1,18 +1,3 @@
-variable "aws_region" {
-  description = "The Amazon region."
-  type        = string
-}
-
-variable "project" {
-  description = "Name of the project."
-  type        = string
-}
-
-variable "environment" {
-  description = "Logical name of the environment."
-  type        = string
-}
-
 variable "key_name" {
   description = "SSH key name for the environment."
   type        = string
@@ -22,11 +7,6 @@ variable "amazon_optimized_amis" {
   description = "Map from region to AMI. By default the latest Amazon Linux is used."
   type        = map(string)
   default     = {}
-}
-
-variable "vpc_id" {
-  description = "The VPC to launch the instance in (e.g. vpc-66ecaa02)."
-  type        = string
 }
 
 variable "subnet_id" {
@@ -56,6 +36,12 @@ variable "admin_cidr" {
   description = "CIDR pattern to access the bastion host"
   type        = string
   default     = "0.0.0.0/0"
+}
+
+variable "admin_ipv6_cidr" {
+  description = "CIDR ipv6 pattern to access the bastion host"
+  type        = string
+  default     = "::/0"
 }
 
 variable "user_data" {

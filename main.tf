@@ -1,37 +1,3 @@
-resource "aws_security_group" "ami" {
-  count       = var.enable_bastion ? 1 : 0
-  name_prefix = "${var.environment}-security-group"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    protocol  = "tcp"
-    from_port = 22
-    to_port   = 22
-
-    cidr_blocks = [var.admin_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(
-    {
-      "Name" = format("%s-bastion-sg", var.environment)
-    },
-    {
-      "Environment" = format("%s", var.environment)
-    },
-    {
-      "Project" = format("%s", var.project)
-    },
-    var.tags,
-  )
-}
-
 data "aws_ami" "aws_optimized_ami" {
   most_recent = true
 
@@ -53,62 +19,67 @@ data "aws_ami" "aws_optimized_ami" {
   owners = ["137112412989"] # AWS
 }
 
+data "aws_region" "current" {}
+
 locals {
-  aws_ami_userdefined = lookup(var.amazon_optimized_amis, var.aws_region, "")
+  aws_ami_userdefined = lookup(var.amazon_optimized_amis, data.aws_region.current.name, "")
   aws_ami             = local.aws_ami_userdefined == "" ? data.aws_ami.aws_optimized_ami.id : local.aws_ami_userdefined
+  service_name        = "bastion"
+}
+
+resource "aws_security_group_rule" "allow_ingress_from_admin_cidr" {
+  description       = "Allow ingress from admin cidr"
+  from_port         = 22
+  protocol          = "tcp"
+  security_group_id = module.asg.security_group_id
+  to_port           = 22
+  type              = "ingress"
+
+  cidr_blocks      = [var.admin_cidr]
+  ipv6_cidr_blocks = [var.admin_ipv6_cidr]
+}
+
+resource "aws_security_group_rule" "allow_egress_to_http" {
+  description       = "Allow egress to http"
+  from_port         = 80
+  protocol          = "tcp"
+  security_group_id = module.asg.security_group_id
+  to_port           = 80
+  type              = "egress"
+
+  cidr_blocks      = ["0.0.0.0/0"]
+  ipv6_cidr_blocks = ["::/0"]
+}
+
+resource "aws_security_group_rule" "allow_egress_to_https" {
+  description       = "Allow egress to https"
+  from_port         = 443
+  protocol          = "tcp"
+  security_group_id = module.asg.security_group_id
+  to_port           = 443
+  type              = "egress"
+
+  cidr_blocks      = ["0.0.0.0/0"]
+  ipv6_cidr_blocks = ["::/0"]
 }
 
 data "template_file" "user_data" {
   template = file("${path.module}/template/user_data.sh")
 }
 
-resource "aws_eip_association" "eip_assoc" {
-  count         = var.enable_bastion ? 1 : 0
-  instance_id   = aws_instance.instance[0].id
-  allocation_id = aws_eip.service[0].allocation_id
-}
+module "asg" {
+  //  source       = "telia-oss/asg/aws"
+  source       = "../terraform-aws-asg"
+  name_prefix  = "${local.service_name}-${terraform.workspace}"
+  max_size     = 1
+  min_size     = 0
+  subnet_ids   = [var.subnet_id]
+  instance_ami = local.aws_ami
+  //  user_data = data.template_file.user_data.rendered
 
-resource "aws_eip" "service" {
-  count = var.enable_bastion ? 1 : 0
-  vpc   = true
-}
-
-resource "aws_instance" "instance" {
-  count = var.enable_bastion ? 1 : 0
-
-  ami                         = local.aws_ami
-  instance_type               = var.instance_type
-  associate_public_ip_address = true
-  ebs_optimized               = var.ebs_optimized
-  subnet_id                   = var.subnet_id
-  vpc_security_group_ids      = [aws_security_group.ami[0].id]
-  key_name                    = var.key_name
-  user_data                   = var.user_data == "" ? data.template_file.user_data.rendered : var.user_data
-
-  tags = merge(
-    {
-      "Name" = format("%s-bastion", var.environment)
-    },
-    {
-      "Environment" = format("%s", var.environment)
-    },
-    {
-      "Project" = format("%s", var.project)
-    },
-    var.tags,
-  )
-
-  volume_tags = merge(
-    {
-      "Name" = format("%s-bastion", var.environment)
-    },
-    {
-      "Environment" = format("%s", var.environment)
-    },
-    {
-      "Project" = format("%s", var.project)
-    },
-    var.tags,
-  )
+  tags = {
+    Name = local.service_name
+    env  = terraform.workspace
+  }
 }
 
